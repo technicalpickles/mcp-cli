@@ -60,9 +60,12 @@ function validateConfigStructure(config, configFilePath) {
 Expected structure:
 {
   "mcpServers": {
-    "server-name": {
+    "stdio-server": {
       "command": "command",
       "args": ["arg1", "arg2"]
+    },
+    "http-server": {
+      "url": "https://example.com/mcp"
     }
   }
 }`)
@@ -82,16 +85,48 @@ Add server configurations to the 'mcpServers' section.`)
       throw new Error(`Server '${serverName}' configuration must be an object: ${configFilePath}`)
     }
     
-    if (!serverConfig.command) {
-      throw new Error(`Server '${serverName}' is missing required 'command' field: ${configFilePath}`)
+    // Server must have either 'command' (for stdio) or 'url' (for HTTP/SSE)
+    const hasCommand = serverConfig.command
+    const hasUrl = serverConfig.url
+    
+    if (!hasCommand && !hasUrl) {
+      throw new Error(`Server '${serverName}' must have either 'command' (for stdio servers) or 'url' (for HTTP/SSE servers): ${configFilePath}`)
     }
     
-    if (typeof serverConfig.command !== 'string') {
-      throw new Error(`Server '${serverName}' command must be a string: ${configFilePath}`)
+    if (hasCommand && hasUrl) {
+      throw new Error(`Server '${serverName}' cannot have both 'command' and 'url' - use 'command' for stdio servers or 'url' for HTTP/SSE servers: ${configFilePath}`)
     }
     
-    if (serverConfig.args && !Array.isArray(serverConfig.args)) {
-      throw new Error(`Server '${serverName}' args must be an array: ${configFilePath}`)
+    if (hasCommand) {
+      if (typeof serverConfig.command !== 'string') {
+        throw new Error(`Server '${serverName}' command must be a string: ${configFilePath}`)
+      }
+      
+      if (serverConfig.args && !Array.isArray(serverConfig.args)) {
+        throw new Error(`Server '${serverName}' args must be an array: ${configFilePath}`)
+      }
+    }
+    
+    if (hasUrl) {
+      if (typeof serverConfig.url !== 'string') {
+        throw new Error(`Server '${serverName}' url must be a string: ${configFilePath}`)
+      }
+      
+      try {
+        new URL(serverConfig.url)
+      } catch {
+        throw new Error(`Server '${serverName}' url must be a valid URL: ${configFilePath}`)
+      }
+      
+      // Validate transport if present
+      if (serverConfig.transport && !['http', 'sse'].includes(serverConfig.transport)) {
+        throw new Error(`Server '${serverName}' transport must be 'http' or 'sse': ${configFilePath}`)
+      }
+    }
+    
+    // Validate env if present
+    if (serverConfig.env && (typeof serverConfig.env !== 'object' || Array.isArray(serverConfig.env))) {
+      throw new Error(`Server '${serverName}' env must be an object: ${configFilePath}`)
     }
   }
 }
